@@ -1,0 +1,232 @@
+---
+title: "Missing Value Imputation"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE)
+```
+
+-----
+
+
+##### Load the data set
+
+```{r Load}
+INFILE <- "C:/Users/aroon/Desktop/MSDS/422/MSDS422/Week 1/HMEQ_Loss.csv"
+df <- read.csv(INFILE)
+copy.df <- df
+
+```
+##### Preliminary exploration of dataset
+
+```{r exploration}
+
+# Exploring Raw data
+head(df) # first 6
+tail(df) # last 6
+
+# view the class of the data input
+class(df)
+print(str(df)) # structure of data frame
+
+# view diamension #rows and columns
+dim(df)
+nrow(df)
+names(df) # column names
+summary(df) # summary of Data Frame
+sum(complete.cases(df)) # Check for number of complete rows
+summary(df$LOAN)
+summary(df$MORTDUE)
+# load dplyr
+library(dplyr)
+glimpse(df)
+# find the mean of debt to income ratio by variable BAD
+print( with( df, tapply( DEBTINC, TARGET_BAD_FLAG, mean, na.rm=TRUE ) ) )
+# find the mean of mortgage due by variable BAD
+print( with( df, tapply( MORTDUE, TARGET_BAD_FLAG, mean, na.rm=TRUE ) ) )
+
+```
+
+
+
+##### Graphs
+
+```{r Graphs}
+par(mfrow = c(3,3))
+
+hist(df$TARGET_BAD_FLAG, xlab="Bad loans", main=" BAD loans") # histogram of bad loans
+#Amount of the loan request
+hist(df$LOAN,main="Loans")
+plot(df$MORTDUE,df$LOAN)
+hist(df$VALUE/df$MORTDUE ,main= "Value to Mortgage Ratio")
+# find the mean of debt to income ratio by variable BAD
+barplot( with( df, tapply( DEBTINC, TARGET_BAD_FLAG, mean, na.rm=TRUE ,main="Debt to income classified by Bad debt") ) )
+
+
+
+
+
+
+df$M_DEBTINC = is.na( df$DEBTINC ) + 0
+df$M_VALUE = is.na( df$VALUE ) + 0
+df$M_MORTDUE = is.na( df$MORTDUE ) + 0
+df$M_YOJ = is.na( df$YOJ ) + 0
+df$M_DEROG = is.na( df$DEROG ) + 0
+df$M_DELINQ = is.na( df$DELINQ ) + 0
+df$M_CLAGE = is.na( df$CLAGE ) + 0
+df$M_NINQ = is.na( df$NINQ ) + 0
+df$M_CLNO = is.na( df$CLNO ) + 0
+
+head(df)
+
+```
+##### Find the mean of the columns. Copy the column value into new column and call it IMP that will be corrected values. 
+
+
+```{r Mean_COPYCOLUMN data}
+#mean( df$DEBTINC, na.rm=TRUE ) # used to find mean.
+df$IMP_DEBTINC = df$DEBTINC
+df$IMP_VALUE = df$VALUE
+df$IMP_MORTDUE = df$MORTDUE
+df$IMP_YOJ = df$YOJ
+df$IMP_DEROG = df$DEROG
+df$IMP_DELINQ = df$DELINQ
+df$IMP_CLAGE =  df$CLAGE
+df$IMP_NINQ =  df$NINQ
+df$IMP_CLNO = df$CLNO
+
+```
+##### Create new column for every column that will have imputed values and have column name with IMP prefixed. Fill the missing values with the average value.
+
+
+```{r column IMP_}
+
+####impute using mean
+df$IMP_DEBTINC = ifelse(is.na( df$IMP_DEBTINC ), mean( df$DEBTINC, na.rm=TRUE ), df$IMP_DEBTINC ) 
+df$IMP_CLAGE = ifelse(is.na(df$CLAGE), mean( df$CLAGE, na.rm= TRUE ), df$IMP_CLAGE )   
+df$IMP_YOJ = ifelse(is.na(df$YOJ), mean( df$YOJ, na.rm= TRUE ), df$IMP_YOJ )
+# though there is only 1 maximum value of 10 and mean = 0.2546 median is 0. It's safe to assume the mean value for the missing value.
+df$IMP_DEROG = ifelse(is.na(df$DEROG), mean( df$DEROG, na.rm= TRUE ), df$IMP_DEROG )
+# safer to assume mean value when the data is missing because median, 1st,3rd quartile value are 0
+df$IMP_DELINQ = ifelse(is.na(df$DELINQ), mean( df$DELINQ, na.rm= TRUE ), df$IMP_DELINQ ) 
+
+####impute using median 
+
+df$IMP_VALUE = ifelse(is.na( df$IMP_VALUE ), median( df$VALUE, na.rm=TRUE ), df$IMP_VALUE )
+df$IMP_MORTDUE = ifelse(is.na( df$MORTDUE), median( df$MORTDUE, na.rm=TRUE),df$IMP_MORTDUE ) 
+# Number of recent credit inquiries are usually whole numbers. mean is only.1 more than median.
+df$IMP_NINQ = ifelse(is.na(df$NINQ), median( df$NINQ, na.rm= TRUE ), df$IMP_NINQ ) 
+# number of credit line is a whole number and since mean is only .1 greater than median.I used median value
+df$IMP_CLNO = ifelse(is.na(df$CLNO), mean( df$CLNO, na.rm= TRUE ), df$IMP_CLNO ) 
+
+```
+##### Getting rid of the columns with missing values
+```{r subset}
+print( head(df) )
+df = subset(df, select = -c( DEBTINC,VALUE,MORTDUE,YOJ,CLAGE,DEROG,DELINQ,NINQ,CLNO ) )
+print(head(df))
+
+```
+##### Handle Categorical variable
+```{r categorical}
+print( with( df, tapply( TARGET_BAD_FLAG, JOB, mean, na.rm=TRUE ) ) ) # get the bad loan based on job title.
+df$IMP_JOB = df$JOB # copy JOB into IMP_JOB
+df$IMP_REASON = df$REASON # copy REASON into IMP_REASON
+# id the job is blank then mark it unknown
+
+df$IMP_JOB = ifelse(df$JOB == "", "UNKNOWN", as.character(df$IMP_JOB) )
+df$IMP_REASON = ifelse(df$REASON == "", "UNKNOWN", as.character(df$IMP_REASON) )
+
+print( head(df) )
+df = subset(df, select = -c( JOB, REASON ) )
+print( head(df) )
+
+
+```
+##### * Outlier Stats
+```{r Outlier}
+boxplot(copy.df)
+par(mfrow = c(1,2))
+# the 2 variables with outliers that needs to be fixed 
+boxplot(df$IMP_DEBTINC,main="Debt to income ratio") 
+boxplot(df$IMP_MORTDUE, main="Mortgage due") 
+
+
+```
+##### Get the MAX, MIN, MEAN, SD for 2 variables - DEBTINC and MARTDUE
+```{r boxplotstats}
+a1 = max( df$IMP_DEBTINC, na.rm=TRUE )
+z1 = min( df$IMP_DEBTINC, na.rm=TRUE )
+m1 = mean( df$IMP_DEBTINC, na.rm=TRUE )
+s1 = sd( df$IMP_DEBTINC, na.rm=TRUE )
+a2 = max( df$IMP_MORTDUE, na.rm=TRUE )
+z2 = min( df$IMP_MORTDUE, na.rm=TRUE )
+m2 = mean( df$IMP_MORTDUE, na.rm=TRUE )
+s2 = sd( df$IMP_MORTDUE, na.rm=TRUE )
+
+```
+##### If the value beyond  mean +3 standard deviation then set it to mean+3*SD and if value is lesser than mean-3SD ,then replace it with mean-3SD.
+```{r replaceOutlier}
+df$IMP_DEBTINC = ifelse( df$IMP_DEBTINC > m1+3*s1, m1+3*s1, df$IMP_DEBTINC )
+df$IMP_DEBTINC = ifelse( df$IMP_DEBTINC < m1-3*s1, m1-3*s1, df$IMP_DEBTINC )
+df$IMP_MORTDUE = ifelse( df$IMP_MORTDUE > m2+3*s2, m2+3*s2, df$IMP_MORTDUE )
+df$IMP_MORTDUE = ifelse( df$IMP_MORTDUE < m2-3*s2, m2-3*s2, df$IMP_MORTDUE )
+
+```
+##### Histogram and box plot after fixing outliers
+```{r graph_afterOutlier}
+par(mfrow=c(2,3))
+hist( df$IMP_DEBTINC  )
+hist( df$IMP_MORTDUE  )
+boxplot( df$IMP_DEBTINC ,main= "Debt to income ratio" )
+boxplot( df$IMP_MORTDUE , main="Mortgage due"  )
+
+```
+##### Recalculate the MAX, MIN, MEAN, SD for 2 variables - DEBTINC and MARTDUE
+```{r recal_values}
+a1 = max( df$IMP_DEBTINC, na.rm=TRUE )
+z1 = min( df$IMP_DEBTINC, na.rm=TRUE )
+m1 = mean( df$IMP_DEBTINC, na.rm=TRUE )
+s1 = sd( df$IMP_DEBTINC, na.rm=TRUE )
+a2 = max( df$IMP_MORTDUE, na.rm=TRUE )
+z2 = min( df$IMP_MORTDUE, na.rm=TRUE )
+m2 = mean( df$IMP_MORTDUE, na.rm=TRUE )
+s2 = sd( df$IMP_MORTDUE, na.rm=TRUE )
+```
+##### Create table and pie chart of the categorical table
+```{r categorical_graph_}
+tbl1 <- table( df$IMP_JOB )
+tbl2 <- table( df$IMP_REASON )
+par(mfrow=c(1,2))
+pie( tbl1 , main= "JOB" )
+pie( tbl2, main= "REASON" )
+```
+
+
+
+##### Create new variable to identift risky jobs
+```{r newColumn_}
+print( with( df, tapply( TARGET_BAD_FLAG, IMP_JOB, mean ) ) )
+df$FLAG_JOB_RISKY = ifelse(df$IMP_JOB %in% c("Self","Sales"), 1, 0 )
+head(df,n=25)
+summary(df)
+```
+##### Prediction using decision tree
+```{r DecisionTree_}
+
+library( rpart ) # model
+library( rpart.plot )
+df2 <- df 
+t = rpart( TARGET_BAD_FLAG ~. , method="class", data=df)
+rpart.plot( t, box.palette="RdBu", shadow.col="gray", nn=TRUE) 
+p_bad = predict( t, data=df2, type=c("class") )
+p_Prob = predict( t, data=df2, type=c("prob") )
+df2 = cbind( df2, p_bad )
+df2 = cbind( df2, p_Prob )
+
+accuracy = sum(df2$BAD == df2$p_bad)/length(df2$BAD)
+cat( "The accuracy of prediction is",accuracy )
+```
