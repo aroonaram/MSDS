@@ -1,0 +1,413 @@
+---
+title: "Regression"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE)
+```
+
+-----
+##### Load Libraries
+
+```{r Load library}
+#loading Packages
+library(tidyverse)
+library(modelr)
+library(broom)
+
+#Load ISLR Package
+library('ISLR')
+library(randomForest)
+
+#ROCR Curve
+library(ROCR)
+
+# Decision Tree
+library(caret)
+library( rpart ) # model
+library( rpart.plot )
+
+
+```
+
+##### Load Dataset
+
+```{r load dataset}
+INFILE <- "C:/Users/aroon/Desktop/MSDS/422/MSDS422/Unit 3/ImputedDataset.csv"
+data = read.csv(INFILE, header=T)
+dim(data)
+summary(data)
+
+
+```
+##### Drop TARGET LOAM Amount and Make Target flag as a factor variable
+
+```{r drop target amount}
+
+# remove TARGET_LOSS_AMT from the dataframe
+
+data <- data[-c(2)]
+
+summary(data)
+
+mydata <- na.omit(data)
+dim(mydata)
+
+mydata$TARGET_BAD_FLAG = as.factor(mydata$TARGET_BAD_FLAG )
+summary(mydata)
+str(mydata)
+
+
+```
+
+
+```{r Split data into train and test}
+
+#################### Data Split ####################
+set.seed(12345)
+split<-sample(nrow(mydata),nrow(mydata)*0.8)
+training<-mydata[split,]
+testing<-mydata[-split,]
+
+#table(training$TARGET_BAD_FLAG)
+dim(training)
+dim(testing)
+
+
+```
+
+```{r model training}
+
+# logistic regression of all variables
+
+model <- glm(TARGET_BAD_FLAG ~.,family=binomial(link='logit'),data=training)
+
+summary(model)
+
+# prediction
+pred_test <-predict(model,testing, type="response")
+pred_train <-predict(model,training, type="response")
+
+# get the confusion matrix details
+table(Actualvalue=training$TARGET_BAD_FLAG, Predictedvalue=pred_train > 0.5)
+table(Actualvalue=testing$TARGET_BAD_FLAG, Predictedvalue=pred_test > 0.5)
+
+# fit the model to test and train data 
+fitted.results.test <- ifelse(pred_test > 0.5,1,0)
+fitted.results.train <- ifelse(pred_train > 0.5,1,0)
+misClasificErrortest <- mean(fitted.results.test != testing$TARGET_BAD_FLAG)
+misClasificErrortrain <- mean(fitted.results.train != training$TARGET_BAD_FLAG)
+
+# get the accuracy score
+print(paste('Accuracy_test',1-misClasificErrortest))
+print(paste('Accuracy_train',1-misClasificErrortrain))
+```
+
+```{r ROC Curve}
+
+
+# ROCR prediction
+ROCRpred_train <- prediction(pred_train, training$TARGET_BAD_FLAG)
+ROCRpred_test <- prediction(pred_test, testing$TARGET_BAD_FLAG)
+
+#ROCR Performance
+ROCRperf_train <- performance(ROCRpred_train, 'tpr','fpr') 
+ROCRperf_test <- performance(ROCRpred_test, 'tpr','fpr') 
+
+#ROCR plot
+
+plot(ROCRperf_train, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TRAINING") 
+plot(ROCRperf_test, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TESTING") 
+```
+
+
+
+
+```{r Feature importance using Decision tree}
+
+#DECISION TREE
+
+# Train an rpart model and compute variable importance.
+
+set.seed(100)
+rPartMod <- train(TARGET_BAD_FLAG ~ ., data=training, method="rpart")
+rpartImp <- varImp(rPartMod)
+
+rownames(rpartImp$importance)
+
+names(rpartImp[order(rpartImp, decreasing = TRUE)][1:3])
+
+plot(rpartImp)
+
+rownames(rpartImp$importance)[order(rpartImp$Overall, decreasing=TRUE)]
+
+# The top variables were kept for further analysis:
+
+
+
+top <- cbind(name = rownames(varImp(rPartMod)[[1]]), value = varImp(rPartMod)[[1]])
+selection <- as.character(top[order(top[,2], decreasing = T),][1:6,1])
+
+
+
+#select only the top10 columns:
+training1 <- training[selection]
+training1['TARGET_BAD_FLAG'] = training['TARGET_BAD_FLAG'] 
+testing1 <- testing[selection]
+testing1['TARGET_BAD_FLAG'] = testing['TARGET_BAD_FLAG'] 
+
+
+
+
+```
+
+```{r pass features from decision tree and calculate accuracy and ROC for test and Train}
+
+model <- glm(TARGET_BAD_FLAG ~.,family=binomial(link='logit'),data=training1)
+
+summary(model)
+
+# prediction
+pred_test1 <-predict(model,testing1, type="response")
+pred_train1 <-predict(model,training1, type="response")
+
+# get the confusion matrix details
+table(Actualvalue=training1$TARGET_BAD_FLAG, Predictedvalue=pred_train1 > 0.5)
+table(Actualvalue=testing1$TARGET_BAD_FLAG, Predictedvalue=pred_test1 > 0.5)
+
+# fit the model to test and train data 
+fitted.results.test1 <- ifelse(pred_test1 > 0.5,1,0)
+fitted.results.train1 <- ifelse(pred_train1 > 0.5,1,0)
+misClasificErrortest1 <- mean(fitted.results.test1 != testing1$TARGET_BAD_FLAG)
+misClasificErrortrain1 <- mean(fitted.results.train1 != training1$TARGET_BAD_FLAG)
+
+# get the accuracy score
+print(paste('Accuracy_test with variable selection using decision Tree',1-misClasificErrortest1))
+print(paste('Accuracy_train with variable selection using decision Tree',1-misClasificErrortrain1))
+
+
+```
+
+```{r ROC curve for Decision Tree}
+
+# ROCR prediction
+ROCRpred_train1 <- prediction(pred_train1, training1$TARGET_BAD_FLAG)
+ROCRpred_test1 <- prediction(pred_test1, testing1$TARGET_BAD_FLAG)
+
+#ROCR Performance
+ROCRperf_train1 <- performance(ROCRpred_train1, 'tpr','fpr') 
+ROCRperf_test1 <- performance(ROCRpred_test1, 'tpr','fpr') 
+
+#ROCR plot
+
+plot(ROCRperf_train1, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TRAINING - Decision Tree") 
+plot(ROCRperf_test1, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TESTING - Decision Tree") 
+
+
+
+```
+
+
+```{r Feature importance using Random Forest}
+
+# RANDOM FOREST
+
+# Train an rpart model and compute variable importance.
+
+set.seed(100)
+modelRF <-train(TARGET_BAD_FLAG~., data=training, method="rf")
+modelRF <- varImp(modelRF)
+
+
+
+plot(modelRF)
+
+rownames(modelRF$importance)[order(modelRF$Overall, decreasing=TRUE)]
+
+# The top variables were kept for further analysis:
+
+
+
+top <- cbind(name = rownames(varImp(rPartMod)[[1]]), value = varImp(rPartMod)[[1]])
+selection <- as.character(top[order(top[,2], decreasing = T),][1:10,1])
+
+
+
+#select only the top10 columns:
+training2 <- training[selection]
+training2['TARGET_BAD_FLAG'] = training['TARGET_BAD_FLAG'] 
+testing2 <- testing[selection]
+testing2['TARGET_BAD_FLAG'] = testing['TARGET_BAD_FLAG'] 
+
+
+```
+
+```{r pass features from Random Forest and calculate accuracy and ROC for test and Train}
+
+
+model_rf <- glm(TARGET_BAD_FLAG ~.,family=binomial(link='logit'),data=training2)
+
+summary(model_rf)
+
+# prediction
+pred_test2 <-predict(model_rf,testing2, type="response")
+pred_train2 <-predict(model_rf,training2, type="response")
+
+# get the confusion matrix details
+table(Actualvalue=training2$TARGET_BAD_FLAG, Predictedvalue=pred_train2 > 0.5)
+table(Actualvalue=testing2$TARGET_BAD_FLAG, Predictedvalue=pred_test2 > 0.5)
+
+# fit the model to test and train data 
+fitted.results.test2 <- ifelse(pred_test2 > 0.5,1,0)
+fitted.results.train2 <- ifelse(pred_train2 > 0.5,1,0)
+misClasificErrortest2 <- mean(fitted.results.test2 != testing2$TARGET_BAD_FLAG)
+misClasificErrortrain2 <- mean(fitted.results.train2 != training2$TARGET_BAD_FLAG)
+
+# get the accuracy score
+print(paste('Accuracy_test with variable selection using Random Forest',1-misClasificErrortest2))
+print(paste('Accuracy_train with variable selection using Random Forest',1-misClasificErrortrain2))
+
+
+```
+
+```{r ROC curve for Random Forest}
+
+# ROCR prediction
+ROCRpred_train2 <- prediction(pred_train2, training2$TARGET_BAD_FLAG)
+ROCRpred_test2 <- prediction(pred_test2, testing2$TARGET_BAD_FLAG)
+
+#ROCR Performance
+ROCRperf_train2 <- performance(ROCRpred_train2, 'tpr','fpr') 
+ROCRperf_test2 <- performance(ROCRpred_test2, 'tpr','fpr') 
+
+#ROCR plot
+
+plot(ROCRperf_train2, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TRAINING_RF") 
+plot(ROCRperf_test2, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TESTING_RF") 
+
+
+
+```
+
+```{r Feature importance using Gradient Boosting}
+library(gbm)
+gbmFitGene=train(TARGET_BAD_FLAG~.,data=training, method =" gbm" )
+vImpGbm=varImp(gbmFitGene) #Variable importance
+
+
+top <- cbind(name = rownames(varImp(rPartMod)[[1]]), value = varImp(rPartMod)[[1]])
+selection <- as.character(top[order(top[,2], decreasing = T),][1:8,1])
+
+
+
+#select only the top10 columns:
+training3 <- training[selection]
+training3['TARGET_BAD_FLAG'] = training['TARGET_BAD_FLAG'] 
+testing3 <- testing[selection]
+testing3['TARGET_BAD_FLAG'] = testing['TARGET_BAD_FLAG'] 
+
+
+
+```
+
+```{r pass features from Gradient Boosting and calculate accuracy and ROC for test and Train}
+
+
+model_gb <- glm(TARGET_BAD_FLAG ~.,family=binomial(link='logit'),data=training3)
+
+summary(model_gb)
+
+# prediction
+pred_test3 <-predict(model_gb,testing3, type="response")
+pred_train3 <-predict(model_gb,training3, type="response")
+
+# get the confusion matrix details
+table(Actualvalue=training3$TARGET_BAD_FLAG, Predictedvalue=pred_train3 > 0.5)
+table(Actualvalue=testing3$TARGET_BAD_FLAG, Predictedvalue=pred_test3 > 0.5)
+
+# fit the model to test and train data 
+fitted.results.test3 <- ifelse(pred_test3 > 0.5,1,0)
+fitted.results.train3 <- ifelse(pred_train3 > 0.5,1,0)
+misClasificErrortest3 <- mean(fitted.results.test3 != testing3$TARGET_BAD_FLAG)
+misClasificErrortrain3 <- mean(fitted.results.train3 != training3$TARGET_BAD_FLAG)
+
+# get the accuracy score
+print(paste('Accuracy_test with variable selection using Random Forest',1-misClasificErrortest3))
+print(paste('Accuracy_train with variable selection using Random Forest',1-misClasificErrortrain3))
+
+
+
+```
+
+```{r Feature importance using Gradient boosting}
+
+
+# ROCR prediction
+ROCRpred_train3 <- prediction(pred_train3, training3$TARGET_BAD_FLAG)
+ROCRpred_test3 <- prediction(pred_test3, testing3$TARGET_BAD_FLAG)
+
+#ROCR Performance
+ROCRperf_train3 <- performance(ROCRpred_train3, 'tpr','fpr') 
+ROCRperf_test3 <- performance(ROCRpred_test3, 'tpr','fpr') 
+
+#ROCR plot
+
+plot(ROCRperf_train3, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TRAINING_RF") 
+plot(ROCRperf_test3, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TESTING_RF")
+
+```
+
+```{r STEPWISE }
+
+# STEPWISE SELECTIOn
+
+model_SW_F <- glm(TARGET_BAD_FLAG ~ DEROG+DELINQ+DEBTINC+CLAGE,family=binomial(link='logit'),data=training)
+
+summary(model_SW_F)
+
+# prediction
+pred_test4 <-predict(model_SW_F,testing, type="response")
+pred_train4 <-predict(model_SW_F,training, type="response")
+
+# get the confusion matrix details
+table(Actualvalue=training$TARGET_BAD_FLAG, Predictedvalue=pred_train4 > 0.5)
+table(Actualvalue=testing$TARGET_BAD_FLAG, Predictedvalue=pred_test4 > 0.5)
+
+# fit the model to test and train data 
+fitted.results.test4 <- ifelse(pred_test4 > 0.5,1,0)
+fitted.results.train4 <- ifelse(pred_train4 > 0.5,1,0)
+misClasificErrortest4 <- mean(fitted.results.test4 != testing$TARGET_BAD_FLAG)
+misClasificErrortrain4 <- mean(fitted.results.train4 != training$TARGET_BAD_FLAG)
+
+# get the accuracy score
+print(paste('Accuracy_test with variable selection using Random Forest',1-misClasificErrortest4))
+print(paste('Accuracy_train with variable selection using Random Forest',1-misClasificErrortrain4))
+
+
+
+```
+```{r ROC CURVE STEPWISE}
+
+
+# ROCR prediction
+ROCRpred_train4 <- prediction(pred_train4, training$TARGET_BAD_FLAG)
+ROCRpred_test4 <- prediction(pred_test4, testing$TARGET_BAD_FLAG)
+
+#ROCR Performance
+ROCRperf_train4 <- performance(ROCRpred_train4, 'tpr','fpr') 
+ROCRperf_test4 <- performance(ROCRpred_test4, 'tpr','fpr') 
+
+#ROCR plot
+
+plot(ROCRperf_train4, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TRAINING_RF") 
+plot(ROCRperf_test4, colorize = TRUE,print.cutoffs.at =seq(0.1,by=0.1), main = "ROC Curve for TESTING_RF")
+
+
+
+```
+
+
